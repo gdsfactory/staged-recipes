@@ -17,7 +17,7 @@ except ImportError:
 
 def get_host_platform():
     from sys import platform
-    if platform == "linux" or platform == "linux2":
+    if platform in ["linux", "linux2"]:
         return "linux"
     elif platform == "darwin":
         return "osx"
@@ -35,8 +35,7 @@ def build_all(recipes_dir, arch):
 
     platform = get_host_platform()
     script_dir = os.path.dirname(os.path.realpath(__file__))
-    variant_config_file = os.path.join(script_dir, '{}{}.yaml'.format(
-        platform, arch))
+    variant_config_file = os.path.join(script_dir, f'{platform}{arch}.yaml')
 
     found_cuda = False
     found_centos7 = False
@@ -68,11 +67,11 @@ def build_all(recipes_dir, arch):
 
                 if 'MACOSX_DEPLOYMENT_TARGET' in config:
                     for version in config['MACOSX_DEPLOYMENT_TARGET']:
-                        version = tuple([int(x) for x in version.split('.')])
+                        version = tuple(int(x) for x in version.split('.'))
                         deployment_version = max(deployment_version, version)
                 if 'MACOSX_SDK_VERSION' in config:
                     for version in config['MACOSX_SDK_VERSION']:
-                        version = tuple([int(x) for x in version.split('.')])
+                        version = tuple(int(x) for x in version.split('.'))
                         sdk_version = max(sdk_version, deployment_version, version)
 
     with open(variant_config_file, 'r') as f:
@@ -96,7 +95,7 @@ def build_all(recipes_dir, arch):
     if platform == "osx" and (sdk_version != (0, 0) or deployment_version != (0, 0)):
         subprocess.run("run_conda_forge_build_setup", shell=True, check=True)
 
-    print("Building {} with conda-forge/label/main".format(','.join(folders)))
+    print(f"Building {','.join(folders)} with conda-forge/label/main")
     channel_urls = ['local', 'conda-forge']
     build_folders(recipes_dir, folders, arch, channel_urls)
 
@@ -107,18 +106,19 @@ def get_config(arch, channel_urls):
     platform = get_host_platform()
     script_dir = os.path.dirname(os.path.realpath(__file__))
     variant_config_files = []
-    variant_config_file = os.path.join(script_dir, '{}{}.yaml'.format(
-        platform, arch))
+    variant_config_file = os.path.join(script_dir, f'{platform}{arch}.yaml')
     if os.path.exists(variant_config_file):
         variant_config_files.append(variant_config_file)
 
     error_overlinking = (get_host_platform() != "win")
 
-    config = conda_build.api.Config(
-        variant_config_files=variant_config_files, arch=arch,
-        exclusive_config_file=exclusive_config_file, channel_urls=channel_urls,
-        error_overlinking=error_overlinking)
-    return config
+    return conda_build.api.Config(
+        variant_config_files=variant_config_files,
+        arch=arch,
+        exclusive_config_file=exclusive_config_file,
+        channel_urls=channel_urls,
+        error_overlinking=error_overlinking,
+    )
 
 
 def build_folders(recipes_dir, folders, arch, channel_urls):
@@ -132,8 +132,7 @@ def build_folders(recipes_dir, folders, arch, channel_urls):
     config = get_config(arch, channel_urls)
     platform = get_host_platform()
 
-    worker = {'platform': platform, 'arch': arch,
-              'label': '{}-{}'.format(platform, arch)}
+    worker = {'platform': platform, 'arch': arch, 'label': f'{platform}-{arch}'}
 
     G = construct_graph(recipes_dir, worker=worker, run='build',
                         conda_resolve=conda_resolve, folders=folders,
@@ -141,8 +140,10 @@ def build_folders(recipes_dir, folders, arch, channel_urls):
     order = list(nx.topological_sort(G))
     order.reverse()
 
-    print('Computed that there are {} distributions to build from {} recipes'
-          .format(len(order), len(folders)))
+    print(
+        f'Computed that there are {len(order)} distributions to build from {len(folders)} recipes'
+    )
+
     if not order:
         print('Nothing to do')
         return
@@ -191,8 +192,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     check_recipes_in_correct_dir(root_dir, "recipes")
-    use_mamba = read_mambabuild(os.path.join(root_dir, "recipes"))
-    if use_mamba:
-      use_mambabuild()
-      subprocess.run("conda clean --all --yes", shell=True, check=True)
+    if use_mamba := read_mambabuild(os.path.join(root_dir, "recipes")):
+        use_mambabuild()
+        subprocess.run("conda clean --all --yes", shell=True, check=True)
     build_all(os.path.join(root_dir, "recipes"), args.arch)
